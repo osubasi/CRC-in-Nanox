@@ -1,0 +1,11 @@
+Basic installation steps are:
+
+1) autoreconf -fiv
+
+2) ./configure --prefix=/path-to-install --enable-resiliency --with-mcc=/path-to-mercurium --without-opencl --without-cuda --disable-fault-injection --with-boost=/path-to-boost CXXFLAGS=-march=native
+
+3) make -j 4
+
+4) make install
+
+NOTE: Flags --enable-resiliency, --with-boost=/path-to-boost and CXXFLAGS=-march=native are required. --with-mcc=/path-to-mercurium, --without-opencl, --without-cuda and --disable-fault-injection are optional.

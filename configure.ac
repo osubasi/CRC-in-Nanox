@@ -1,0 +1,360 @@
+AC_INIT([nanox], [0.10a], [pm-tools@bsc.es])
+AC_LANG([C++])
+AC_CONFIG_SRCDIR([src/core/system.cpp])
+AC_DEFINE_UNQUOTED([NANOX_CONFIGURE_ARGS], ["$0 $@"], [Configure line])
+
+# Environment
+AC_CANONICAL_BUILD
+AC_CANONICAL_SYSTEM
+AC_CANONICAL_TARGET
+
+# Automake initialization
+AM_INIT_AUTOMAKE([-Wall dist-bzip2 -Wno-portability subdir-objects foreign])
+AC_CONFIG_MACRO_DIR([m4])
+
+# Enable silent rules if available
+supported_silent_rules=1
+m4_ifdef([AM_SILENT_RULES],
+         [AM_SILENT_RULES([yes])],
+         [supported_silent_rules=0])
+
+AM_CONDITIONAL([SUPPORTED_SILENT_RULES], test x$supported_silent_rules = x1)
+ 
+# Nanos version check
+# Make sure build_version is double-quoted!
+AS_IF([test -d "$srcdir/.git"],[
+   # Git directory found
+   AC_PATH_PROG([GIT], [git], [])
+   AC_MSG_CHECKING([revision of git repository])
+
+   # If git executable is found in path read HEAD version
+   AS_IF([test "$GIT" != ""],[
+      echo "$GIT" "$srcdir" >& AS_MESSAGE_LOG_FD
+      gitversion=$($GIT --git-dir=$srcdir/.git log --pretty='format:%h %ci' -1)
+      gitbranch=$($GIT --git-dir=$srcdir/.git rev-parse --abbrev-ref HEAD)
+      build_version="\"git $gitbranch $gitversion developer version\""
+   ],[
+       # Git executable not found
+       build_version="\"unknown git commit\""
+   ])
+   AC_MSG_RESULT([$build_version])
+],[
+  AS_IF([test -e "$srcdir/VERSION"],[
+    AC_MSG_CHECKING([revision of distributed release])
+    run_gitversion=`cat $srcdir/VERSION`
+    build_version="\"$run_gitversion\""
+    AC_MSG_RESULT([$build_version])
+  ],[
+    build_version="\"unknown revision\""
+  ])
+])
+AC_SUBST([NANOX_BUILD_VERSION],[$build_version])
+AC_DEFINE_UNQUOTED([NANOX_BUILD_VERSION], [$build_version], [Build version])
+
+# Debian release
+AC_CHECK_PROG([DEB_RELEASE], [lsb_release], [$(lsb_release -sc)], [])
+AC_SUBST([DEB_RELEASE])
+
+# Allocator support
+AC_MSG_CHECKING([if Nanos++ Allocator has been enabled])
+AC_ARG_ENABLE([allocator], [AS_HELP_STRING([--enable-allocator], [Enables Allocator module])])
+AC_MSG_RESULT([$enable_allocator])
+AS_IF([test "$enable_allocator" = yes],[
+	AC_DEFINE([NANOS_USE_ALLOCATOR],[1],[Specifies whether Nanos++ allocator has been enabled or not])
+])
+
+# Memtracker support
+AC_MSG_CHECKING([if Nanos++ Memtracker has been enabled])
+AC_ARG_ENABLE([memtracker],[AS_HELP_STRING([--enable-memtracker], [Enables Memtracker module])])
+AC_MSG_RESULT([$enable_memtracker])
+AS_IF([test "$enable_memtracker" = xyes],[
+	AC_DEFINE([NANOS_MEMTRACKER_ENABLED],[1],[Specifies whether Nanos++ memtracker module has been enabled or not])
+])
+
+# Set compiler default flags
+: ${CFLAGS=""}
+: ${CXXFLAGS=""}
+
+# ------------------
+# Check for programs
+# ------------------
+ AC_PROG_CC
+ AC_PROG_CPP
+ 
+ AC_PROG_CXX
+ AC_PROG_CXXCPP
+ 
+ AC_PROG_LD
+ AM_PROG_AS
+ 
+ AC_PROG_SED
+
+ # AM_PROG_AR must be called before LT_INIT or a warning ensues
+ m4_ifdef([AM_PROG_AR], [AM_PROG_AR])
+ # Turn off static libraries.
+ LT_INIT([disable-static])
+
+# --------------------------------
+# Compiler and flag checks
+# --------------------------------
+
+# Check for atomic builtins in GCC
+AC_CHECK_GXX_LEGACY_ATOMIC_BUILTINS()
+AC_CHECK_GXX_NEW_ATOMIC_BUILTINS()
+
+# Check for header files
+AC_HEADER_STDC
+
+# Check for typedefs, structures, and compiler characteristics
+AC_C_CONST
+
+# Compiler dependent Configuration flags
+AX_CONFIG_CC
+
+# Check C++11 compatibility.
+# It is required since debugging functions
+# make use of variadic template parameters
+AX_CXX_COMPILE_STDCXX_11([noext],[mandatory])
+
+## -----------------------
+## Check host architecture
+## -----------------------
+OPTIONS=
+ARCHITECTURES=
+
+AX_CHECK_HOST_ARCH
+
+AC_SUBST([OPTIONS])
+AC_SUBST([ARCHITECTURES])
+
+# -------------------
+# Check for libraries
+# -------------------
+
+# Pthreads
+AX_PTHREAD
+
+# MPI
+AX_CHECK_MPI
+
+# GASNet
+AX_CHECK_GASNET
+
+# Memkind
+AX_CHECK_MEMKIND
+
+# Check if NVidia CUDA device has been selected 
+AX_CHECK_CUDA
+
+# Check if OpenCL device has been selected
+AX_CHECK_OPENCL
+
+# Check if SQLite3 has been selected
+AX_CHECK_SQLITE3
+
+# Check hwloc availability
+AX_CHECK_HWLOC
+
+# Check for DLB support
+AX_CHECK_DLB
+
+# Check for Zynq Xilinx DMA driver library (fpga)
+AX_CHECK_XDMA
+
+# Enable Task callback feature
+AX_ENABLE_TASK_CALLBACK
+
+# Check resiliency support
+AX_CHECK_RESILIENCY
+
+# Extrae check
+MPITRACE_HOME=""
+MPITRACE_INC=""
+MPITRACE_LIB=""
+MPITRACE_BIN=""
+
+AC_ARG_WITH([extrae],
+           AS_HELP_STRING([--with-extrae=dir], [Directory of Extrae installation]),
+           [
+                extrae_version_h=$withval/include/extrae_version.h
+                AS_IF([test -e $extrae_version_h],[
+                   extrae_version_string=$(sed -ne '/^\s*#\s*define\s\+EXTRAE_VERSION .*$/p' $extrae_version_h)
+                   extrae_version=$(echo $extrae_version_string | sed -e 's/#define EXTRAE_VERSION EXTRAE_VERSION_NUMBER(\([0-9]*\),\([0-9]*\),\([0-9]*\).*$/\1\2\3/')
+                   AS_IF([test "$extrae_version" -ge 240],[
+                      MPITRACE_HOME="$withval"
+                      MPITRACE_INC="$withval/include"
+                      MPITRACE_LIB="$withval/lib"
+                      AS_IF([test -d "$MPITRACE_HOME/lib64"],[
+                         MPITRACE_LIB="$MPITRACE_HOME/lib64"
+                      ])
+                      MPITRACE_BIN="$withval/bin"
+                      AC_MSG_RESULT([checking if Extrae library is compatible... yes])
+                   ],[
+                      AC_MSG_ERROR([checking if Extrae library is compatible... no (Extrae > 2.4 needed)])
+                   ])
+                ],[
+                   AC_MSG_ERROR([checking if Extrae library is compatible... no (Extrae > 2.4 needed)])
+                ])
+           ]
+)
+
+AC_SUBST([MPITRACE_HOME])
+AC_SUBST([MPITRACE_INC])
+AC_SUBST([MPITRACE_LIB])
+AC_SUBST([MPITRACE_BIN])
+
+AM_CONDITIONAL([instrumentation_EXTRAE], test x"$MPITRACE_HOME" != x)
+
+# Check NextSim support
+AC_ARG_WITH([nextsim],
+           AS_HELP_STRING([--with-nextsim=dir], [Directory of NextSim installation]),
+           [
+              NEXTSIM_HOME="$withval"
+              NEXTSIM_INC="$withval/include"
+           ]
+)
+AC_SUBST([NEXTSIM_HOME])
+AC_SUBST([NEXTSIM_INC])
+AM_CONDITIONAL([instrumentation_NEXTSIM], test x"$NEXTSIM_HOME" != x)
+
+# Check Ayudame support
+AYUDAME_HOME=""
+AYUDAME_INC=""
+AYUDAME_LIB=""
+AYUDAME_BIN=""
+
+AC_ARG_WITH([ayudame],
+           AS_HELP_STRING([--with-ayudame=dir], [Directory of Ayudame installation]),
+           [
+                AYUDAME_HOME="$withval"
+                AYUDAME_INC="$withval/include"
+                AYUDAME_LIB="$withval/lib"
+                AYUDAME_BIN="$withval/bin"
+           ]
+)
+AC_SUBST([AYUDAME_HOME])
+AC_SUBST([AYUDAME_INC])
+AC_SUBST([AYUDAME_LIB])
+AC_SUBST([AYUDAME_BIN])
+
+AM_CONDITIONAL([instrumentation_AYUDAME], test x"$AYUDAME_HOME" != x)
+
+# Check for Chapel support
+AC_ARG_WITH([chapel],
+            AS_HELP_STRING([--with-chapel=dir], [Directory of Chapel installation]),
+	    [
+		chapel=yes
+		CHAPEL_HOME="$withval"
+	    ],
+            [
+		chapel=no
+	    ]
+)
+
+AM_CONDITIONAL([CHAPEL_SUPPORT], [test "$chapel" = "yes"])
+AC_SUBST([CHAPEL_HOME])
+
+# Check MKL Support
+AC_CHECK_LIB([mkl_sequential],[mkl_blas_dgemm],[MKL_LIBS="-lm -lmkl_core -lmkl_sequential"],[MKL_LIBS=""],[-lm -lmkl_core])
+AM_CONDITIONAL([MKL_SUPPORT], test "$MKL_LIBS"x != x )
+AC_SUBST([MKL_LIBS])
+
+
+# mcc support
+AC_ARG_WITH([mcc],
+AS_HELP_STRING([--with-mcc=dir], [Directory of mcc compiler]),
+	[
+      mcc_valid=yes
+		MCC="${withval}/bin/mcc"
+		MCXX="${withval}/bin/mcxx"
+	],
+	[
+      mcc_valid=no
+	])
+
+AC_SUBST([mcc_valid])
+AC_SUBST([MCC])
+AC_SUBST([MCXX])
+
+# Build versions
+AX_BUILD_VERSIONS
+
+# Generate plugin list
+PLUGINS="plugins pms arch/$OS"
+for arch in $ARCHITECTURES; do
+  PLUGINS+=" arch/$arch"
+done
+AC_SUBST([PLUGINS])
+
+# Output files
+AC_CONFIG_HEADERS([config.h])
+
+AC_CONFIG_FILES([
+                 Makefile
+                 doc/Makefile
+                 doc/doxy-nanox
+                 scripts/Makefile
+                 src/Makefile
+                 src/core/Makefile
+                 src/support/Makefile
+                 src/apis/Makefile
+                 src/pms/Makefile
+                 src/plugins/Makefile
+                 src/arch/Makefile
+                 src/arch/unix-os/Makefile
+                 src/arch/smp/Makefile
+                 src/arch/cluster/Makefile
+                 src/arch/fpga/Makefile
+                 src/arch/spu/Makefile
+                 src/arch/gpu/Makefile
+                 src/arch/opencl/Makefile
+                 src/arch/mpi/Makefile
+                 src/utils/Makefile
+                 tests/Makefile
+                 tests/gens/Makefile
+                 tests/gens/api-generator
+                 tests/gens/api-omp-generator
+                 tests/gens/core-generator
+                 tests/gens/gpu-generator
+                 tests/gens/mcc-openmp-generator
+                 tests/gens/mcc-ompss-generator
+                 tests/gens/opencl-generator
+                 tests/gens/resiliency-generator
+       ])
+
+AC_OUTPUT
+
+gcc_builtins_used="unknown"
+AS_IF([test "$new_gcc_builtins" = yes],[
+  gcc_builtins_used="new gcc __atomic builtins"
+],[
+  gcc_builtins_used="legacy gcc __sync builtins"
+])
+
+#AC_DEFUN([ax_check_enabled],[
+#  AS_IF([test -n "$1"],[
+#    echo -n "enabled"
+#  ],[
+#    echo -n "disabled"
+#  ])  
+#])
+#
+#AS_ECHO(["
+#Configuration summary of Nanos++
+#================================
+#
+#Host arch:                $SMP_ARCH
+#User level threading:     $ult_support
+#Configured architectures: $ARCHITECTURES
+#Configured versions:      $VERSIONS
+#Extra options:            $OPTIONS
+#GCC atomics:              $gcc_builtins_used
+#Memory tracker:           $(ax_check_enabled $enable_memtracker)
+#Memory allocator:         $(ax_check_enabled $enable_allocator)
+#Task resiliency:          $(ax_check_enabled $enable_resiliency)"])
+#
+#AS_IF([test "$gasnet_available_conduits" != ""],[
+#   AS_ECHO(["\
+#Cluster/GASNet conduits:  $gasnet_available_conduits"])
+#])
+

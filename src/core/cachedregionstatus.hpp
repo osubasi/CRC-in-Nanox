@@ -1,0 +1,76 @@
+/*************************************************************************************/
+/*      Copyright 2015 Barcelona Supercomputing Center                               */
+/*                                                                                   */
+/*      This file is part of the NANOS++ library.                                    */
+/*                                                                                   */
+/*      NANOS++ is free software: you can redistribute it and/or modify              */
+/*      it under the terms of the GNU Lesser General Public License as published by  */
+/*      the Free Software Foundation, either version 3 of the License, or            */
+/*      (at your option) any later version.                                          */
+/*                                                                                   */
+/*      NANOS++ is distributed in the hope that it will be useful,                   */
+/*      but WITHOUT ANY WARRANTY; without even the implied warranty of               */
+/*      MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the                */
+/*      GNU Lesser General Public License for more details.                          */
+/*                                                                                   */
+/*      You should have received a copy of the GNU Lesser General Public License     */
+/*      along with NANOS++.  If not, see <http://www.gnu.org/licenses/>.             */
+/*************************************************************************************/
+
+#ifndef CACHEDREGIONSTATUS_HPP
+#define CACHEDREGIONSTATUS_HPP
+#include "cachedregionstatus_decl.hpp"
+#include "version.hpp"
+
+namespace nanos {
+
+inline CachedRegionStatus::CachedRegionStatus() : Version(), _ops(), _dirty( false ), _valid(true) {
+}
+
+inline CachedRegionStatus::CachedRegionStatus( CachedRegionStatus const &rs ) : Version( rs ), _ops ( ), _dirty( rs._dirty ), _valid( rs._valid ) {
+}
+
+inline DeviceOps *CachedRegionStatus::getDeviceOps() {
+   return &_ops;
+}
+
+inline CachedRegionStatus &CachedRegionStatus::operator=( CachedRegionStatus const &rs ) {
+   Version::operator=(rs);
+   _dirty = rs._dirty;
+   _valid = rs._valid;
+   return *this;
+}
+
+inline CachedRegionStatus::CachedRegionStatus( CachedRegionStatus &rs ) : Version( rs ), _ops (), _dirty( rs._dirty ), _valid( rs._valid ) {
+}
+
+inline CachedRegionStatus &CachedRegionStatus::operator=( CachedRegionStatus &rs ) {
+   Version::operator=(rs);
+   _dirty = rs._dirty;
+   return *this;
+}
+
+inline bool CachedRegionStatus::isDirty() const {
+   return _dirty;
+}
+inline void CachedRegionStatus::setDirty() {
+   _dirty = true;
+}
+inline void CachedRegionStatus::clearDirty() {
+   _dirty = false;
+}
+
+inline bool CachedRegionStatus::isValid() const {
+   return _valid;
+}
+inline void CachedRegionStatus::setValid( bool flag ) {
+   _valid = flag;
+}
+
+inline void CachedRegionStatus::resetVersion() {
+   Version::resetVersion();
+}
+
+} // namespace nanos
+
+#endif /* CACHEDREGIONSTATUS_HPP */
